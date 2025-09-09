@@ -1,77 +1,83 @@
-// This line must be at the very top of your file to load the .env file.
+// This line must be at the very top of your file!
 require('dotenv').config();
+console.log(process.env.DISCORD_BOT_TOKEN); // Add this line!
+// The rest of your code follows
 
-// Require the necessary Discord.js classes
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
 
-// Access environment variables
+// Get the correct token and application ID from your .env file
 const token = process.env.DISCORD_BOT_TOKEN;
-const roleId = process.env.PING_ROLE_ID;
+const clientId = process.env.DISCORD_APPLICATION_ID;
 const guildId = process.env.YOUR_GUILD_ID;
-const channelId = process.env.PING_CHANNEL_ID; // The new channel ID variable
 
-// Create a new Discord client instance with the required intents
+// Define your commands to register with Discord
+const commands = [
+    {
+        name: 'ping',
+        description: 'Replies with Pong!',
+    },
+    // Add more of your commands here as needed
+];
+
+// Create a new client instance
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
-        GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
     ]
 });
 
-// Event listener for when the bot is ready
-client.on('ready', () => {
-    console.log(`Successfully logged in as ${client.user.tag}!`);
+// When the client is ready, log to the console and start the hourly timer
+client.once('ready', async () => {
+    console.log(`Bot is ready! Logged in as ${client.user.tag}`);
 
-    // --- SCHEDULED PING LOGIC ---
-    // The setInterval function will run the code inside it every 12 hours.
-    // 12 hours * 60 minutes * 60 seconds * 1000 milliseconds
-    const twelveHoursInMs = 12 * 60 * 60 * 1000;
-
-    setInterval(() => {
-        // Find the guild (server) the bot is in
-        const guild = client.guilds.cache.get(guildId);
-        if (!guild) {
-            console.error('ERROR: Guild not found. Check if the bot is in the correct server or if the guild ID is correct.');
-            return;
-        }
-
-        // Find the specific channel by its ID
-        const channel = guild.channels.cache.get(channelId);
-        if (!channel) {
-            console.error('ERROR: Channel not found. Please check your PING_CHANNEL_ID.');
-            return;
-        }
-
-        // Find the specific role by its ID
-        const role = guild.roles.cache.get(roleId);
-        if (!role) {
-            console.error('ERROR: Role not found. Please check your PING_ROLE_ID.');
-            return;
-        }
-
-        // Send the message, tagging the role
-        channel.send(`Hello, <@&${roleId}>! It has been 12 hours since my last scheduled message, now let us revive! (This message was sent by hydro).`);
-        console.log(`Successfully pinged role ${role.name} in channel ${channel.name}.`);
-
-    }, twelveHoursInMs);
-});
-
-// Event listener for messages (the manual ping command)
-client.on('messageCreate', message => {
-    // Ignore messages from other bots
-    if (message.author.bot) return;
-
-    // A simple response to "ping"
-    if (message.content.toLowerCase() === 'ping') {
-        message.reply('Pong!');
+    // Register slash commands with Discord
+    const rest = new REST({ version: '10' }).setToken(token);
+    try {
+        console.log('Started refreshing application (/) commands.');
+        await rest.put(
+            Routes.applicationGuildCommands(clientId, guildId),
+            { body: commands },
+        );
+        console.log('Successfully reloaded application (/) commands.');
+    } catch (error) {
+        console.error(error);
     }
+
+    // --- 12-HOUR PING FEATURE ---
+    // The channel and role IDs you provided
+    const channelId = '1382690787736813599';
+    const roleId = '1414122461070360687';
+
+    setInterval(async () => {
+        try {
+            const channel = client.channels.cache.get(channelId);
+            if (channel) {
+                // Send a message that pings the specified role
+                await channel.send(`<@&${roleId}> I'm still here! This is my 12-hour ping.`);
+            } else {
+                console.error(`Channel with ID ${channelId} not found.`);
+            }
+        } catch (error) {
+            console.error('An error occurred during the 12-hour ping:', error);
+        }
+    }, 1000 * 60 * 60 * 12); // 1000 milliseconds * 60 seconds * 60 minutes * 12 hours = 12 hours
+    // --- END PING FEATURE ---
 });
 
-// Log in to Discord
-if (token) {
-    client.login(token);
-} else {
-    console.error("ERROR: Discord bot token not found in .env file.");
-}
+// Listen for interactions (like slash commands)
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isCommand()) return;
+
+    const { commandName } = interaction;
+
+    if (commandName === 'ping') {
+        await interaction.reply('Pong!');
+    }
+    // Add more command handlers here
+});
+
+// Log in to Discord with your bot's token
+client.login(token);
 
